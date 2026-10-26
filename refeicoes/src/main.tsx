@@ -1,10 +1,16 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import './index.css'
-import App from './App.tsx'
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+import './index.css'
+import {db} from './firebase.ts'
+import {doc, getDoc} from 'firebase/firestore'
+
+
+async function teste() {
+  try {
+    const snap = await getDoc(doc(db, 'usuarios', 'qualquercoisa'));
+    console.log("existe?", snap.exists(), 'dados', snap.data());
+  } catch (error) {
+    console.error("deu bosta", error)
+  }
+}
+
+teste()
