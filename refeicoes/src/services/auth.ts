@@ -14,7 +14,7 @@ export async function entrar(email: string, senha: string): Promise<void> {
 } catch (e) {
   if (e instanceof FirebaseError) {
     switch (e.code) {
-    case 'auth/invalid-credentials':
+    case 'auth/invalid-credential':
         throw new Error('Credenciais inválidas. Verifique seu email e senha.');
     case 'auth/wrong-password':
     throw new Error('Email ou senha inválidos');
