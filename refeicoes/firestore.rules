@@ -2,11 +2,24 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // 1. funções no topo, aqui dentro
+    function autorizado() {
+      return request.auth != null && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid));
+    }
+
+    // 2. regra que você já tem
     match /usuarios/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;
       allow write: if false;
     }
 
+    // 3. a nova: empresas
+    match /empresas/{empresaId} {
+      allow read, write: if autorizado();
+    }
+
+
+    // 4. o "nega o resto" fica sempre por último
     match /{document=**} {
       allow read, write: if false;
     }
