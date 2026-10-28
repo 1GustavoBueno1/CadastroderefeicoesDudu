@@ -1,5 +1,5 @@
 export type Refeicao = 'cafeManha' | 'almoco' | 'cafeTarde' | 'janta';
-
+export const REFEICOES: Refeicao[] = ['cafeManha', 'almoco', 'cafeTarde', 'janta'];
 export type porRefeicao = Record<Refeicao, number>
 
 export type Empresa = {
@@ -28,4 +28,12 @@ export type fechamento = {
     totalCentavos: number,
     qtdNotas: number,
     fechadoEm: Date
+}
+
+export function calculartotal(quantidades: porRefeicao, precos: porRefeicao): number {
+    let total = 0
+    for (const r of REFEICOES) {
+        total += quantidades[r] * precos[r]
+    }
+    return total
 }
