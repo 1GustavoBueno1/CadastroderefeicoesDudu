@@ -27,6 +27,7 @@ export async function entrar(email: string, senha: string): Promise<void> {
    case "auth/invalid-email":
         throw new Error("Email inválido. Verifique o formato do email.");
   }}
+  throw new Error("Erro desconhecido")
 }}
  
 export async function sair(): Promise<void> {
