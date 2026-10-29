@@ -14,7 +14,7 @@ export type Lancamento = {
     quantidades: PorRefeicao,
     precos: PorRefeicao,
     totalCentavos: number,
-    qtdFotos: number
+    qtdFotos?: number
 }
 
 export type Foto = {

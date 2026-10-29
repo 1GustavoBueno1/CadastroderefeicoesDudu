@@ -14,9 +14,13 @@ function doisDigitos(n: number): string {
     return String(n).padStart(2, '0');
 }
 
-export function hoje(): string {
-    const d = new Date();
+// Um instante (ex.: fechadoEm) → 'AAAA-MM-DD' no fuso local
+export function dataLocal(d: Date): string {
     return `${d.getFullYear()}-${doisDigitos(d.getMonth() + 1)}-${doisDigitos(d.getDate())}`;
+}
+
+export function hoje(): string {
+    return dataLocal(new Date());
 }
 
 export function mesAtual(): string {

@@ -2,13 +2,16 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { atualizarEmpresa, buscarEmpresa } from '../services/empresas';
 import { listarLancamentosDoMes } from '../services/lancamentos';
+import { carregarMes } from '../services/relatorios';
+import { apagarNotasDoMes, buscarFechamento } from '../services/fechamentos';
 import { formatarCentavos } from '../lib/dinheiro';
-import { dataValida, diaDaSemana, diasNoMes, formatarData, hoje, mesAtual, mesValido, nomeDoMes, somarMeses } from '../lib/datas';
+import { baixarArquivo, nomeDeArquivo } from '../lib/download';
+import { dataLocal, dataValida, diaDaSemana, diasNoMes, formatarData, hoje, mesAtual, mesValido, nomeDoMes, somarMeses } from '../lib/datas';
 import { NOMES_REFEICOES, converterPrecos, precosParaTexto, type TextoPorRefeicao } from '../lib/refeicoes';
 import { CamposPrecos } from '../componentes/CamposPrecos';
 import { Itens } from '../componentes/Itens';
 import { GraficoMes } from '../componentes/GraficoMes';
-import { REFEICOES, type Empresa as TipoEmpresa, type Lancamento, type Refeicao } from '../types';
+import { REFEICOES, type Empresa as TipoEmpresa, type Fechamento, type Lancamento, type Refeicao } from '../types';
 
 type CargaEmpresa =
     | { estado: 'carregando' }
@@ -122,6 +125,99 @@ function AbrirDia({ empresaId, mes }: { empresaId: string; mes: string }) {
     );
 }
 
+// meses ('empresaId/AAAA-MM') cujo PDF foi gerado nesta sessão: só eles liberam "Apagar notas do mês".
+// Fica na memória da aba: sobrevive à navegação entre telas, some ao recarregar a página.
+const pdfsGerados = new Set<string>();
+
+type CargaFechamento = { estado: 'carregando' } | { estado: 'erro'; mensagem: string } | { estado: 'pronto'; fechamento: Fechamento | null };
+
+function FechamentoMes({ empresa, mes, semLancamentos, carga, aoFechar, aoRecarregar }: {
+    empresa: TipoEmpresa;
+    mes: string;
+    semLancamentos: boolean;
+    carga: CargaFechamento;
+    aoFechar: () => void;
+    aoRecarregar: () => void;
+}) {
+    const chave = `${empresa.id}/${mes}`;
+    const [pdfGerado, setPdfGerado] = useState(() => pdfsGerados.has(chave));
+    const [gerando, setGerando] = useState(false);
+    const [apagando, setApagando] = useState(false);
+    const [erro, setErro] = useState<string | null>(null);
+    const fechamento = carga.estado === 'pronto' ? carga.fechamento : null;
+
+    async function gerarPdf() {
+        setErro(null);
+        setGerando(true);
+        try {
+            const dias = await carregarMes(empresa.id, mes);
+            if (dias.length === 0) throw new Error(`Nenhum dia lançado em ${nomeDoMes(mes)}.`);
+            const { gerarPdfMes } = await import('../lib/pdf');
+            const bytes = await gerarPdfMes(empresa, mes, dias);
+            baixarArquivo(bytes, nomeDeArquivo([empresa.nome, mes]));
+            pdfsGerados.add(chave);
+            setPdfGerado(true);
+        } catch (e) {
+            setErro((e as Error).message);
+        } finally {
+            setGerando(false);
+        }
+    }
+
+    async function apagarNotas() {
+        if (!window.confirm('Você conferiu o PDF? As notas serão apagadas e o mês ficará travado.')) return;
+        setErro(null);
+        setApagando(true);
+        try {
+            await apagarNotasDoMes(empresa.id, mes);
+            aoFechar();
+        } catch (e) {
+            setErro((e as Error).message);
+        } finally {
+            setApagando(false);
+        }
+    }
+
+    return (
+        <section className="painel" aria-labelledby="fechamento">
+            <header><h2 id="fechamento">Fechamento do mês</h2></header>
+            {fechamento && (
+                <p className="aviso-fechado" style={{ marginBottom: 12 }}>
+                    Mês fechado em {formatarData(dataLocal(fechamento.fechadoEm))} — total {formatarCentavos(fechamento.totalCentavos)}
+                </p>
+            )}
+            {carga.estado === 'erro' && (
+                <div className="vazio-caixa" role="alert" style={{ marginBottom: 12 }}>
+                    <p>Não foi possível saber se o mês está fechado. {carga.mensagem}</p>
+                    <button type="button" className="btn" style={{ marginTop: 12 }} onClick={aoRecarregar}>Tentar de novo</button>
+                </div>
+            )}
+            <div className="acoes">
+                <button type="button" className="btn" onClick={gerarPdf} disabled={gerando || semLancamentos}>
+                    {gerando ? 'Gerando PDF…' : 'Gerar PDF do mês'}
+                </button>
+                {carga.estado === 'pronto' && !fechamento && (
+                    <button type="button" className="btn perigo" onClick={apagarNotas}
+                        disabled={!pdfGerado || apagando || gerando}
+                        aria-describedby="fechamento-explicacao">
+                        {apagando ? 'Apagando…' : 'Apagar notas do mês'}
+                    </button>
+                )}
+            </div>
+            <p id="fechamento-explicacao" className="dica" style={{ marginTop: 8 }}>
+                {fechamento
+                    ? 'As notas deste mês já foram apagadas: o PDF traz só o resumo.'
+                    : semLancamentos
+                        ? 'Sem dias lançados neste mês para gerar o PDF.'
+                        : pdfGerado
+                            ? 'Apagar as notas fecha o mês: nenhum dia dele poderá mais ser editado.'
+                            : 'Gere e confira o PDF do mês antes de apagar as notas.'}
+            </p>
+            {erro && <p className="alerta" role="alert" style={{ marginTop: 12 }}>{erro}</p>}
+        </section>
+    );
+}
+
 export function Empresa() {
     const { empresaId = '' } = useParams();
     const navigate = useNavigate();
@@ -152,8 +248,20 @@ export function Empresa() {
         return () => { ativo = false; };
     }, [empresaId, mes]);
 
+    const [cargaFechamento, setCargaFechamento] = useState<CargaFechamento>({ estado: 'carregando' });
+    const carregarFechamento = useCallback(() => {
+        let ativo = true;
+        setCargaFechamento({ estado: 'carregando' });
+        buscarFechamento(empresaId, mes).then(
+            (fechamento) => { if (ativo) setCargaFechamento({ estado: 'pronto', fechamento }); },
+            (e: Error) => { if (ativo) setCargaFechamento({ estado: 'erro', mensagem: e.message }); },
+        );
+        return () => { ativo = false; };
+    }, [empresaId, mes]);
+
     useEffect(carregarEmpresa, [carregarEmpresa]);
     useEffect(carregarMes, [carregarMes]);
+    useEffect(carregarFechamento, [carregarFechamento]);
 
     function irParaMes(novo: string) {
         setBusca(novo === mesAtual() ? {} : { mes: novo }, { replace: true });
@@ -237,6 +345,7 @@ export function Empresa() {
                         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M10 3 5 8l5 5" /></svg>
                     </button>
                     <strong aria-live="polite">{nomeDoMes(mes)}</strong>
+                    {cargaFechamento.estado === 'pronto' && cargaFechamento.fechamento && <span className="pill">Fechado</span>}
                     <button type="button" className="btn btn-icone" aria-label="Próximo mês" onClick={() => irParaMes(somarMeses(mes, 1))}>
                         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m6 3 5 5-5 5" /></svg>
                     </button>
@@ -338,16 +447,9 @@ export function Empresa() {
                     <AbrirDia key={mes} empresaId={empresaId} mes={mes} />
                     <PrecosPadrao key={empresa.id} empresa={empresa}
                         aoSalvar={(e) => setCargaEmpresa({ estado: 'pronto', empresa: e })} />
-                    <section className="painel" aria-labelledby="fechamento">
-                        <header>
-                            <h2 id="fechamento">Fechamento do mês</h2>
-                            <span className="em-breve">em breve</span>
-                        </header>
-                        <div className="acoes">
-                            <button type="button" className="btn" disabled>Gerar PDF do mês</button>
-                            <button type="button" className="btn" disabled>Apagar notas do mês</button>
-                        </div>
-                    </section>
+                    <FechamentoMes key={mes} empresa={empresa} mes={mes}
+                        semLancamentos={cargaMes.estado === 'pronto' && lancamentos.length === 0}
+                        carga={cargaFechamento} aoFechar={carregarFechamento} aoRecarregar={carregarFechamento} />
                 </div>
             </div>
         </main>

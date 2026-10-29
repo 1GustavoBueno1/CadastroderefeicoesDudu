@@ -127,6 +127,16 @@ tr.clicavel:hover td { background: var(--raised); }
 .btn-icone { width: var(--control-height); padding: 0; }
 .btn-icone svg { width: 16px; height: 16px; }
 .em-breve { font-size: var(--fs-small); color: var(--muted); font-weight: 400; }
+.btn.perigo { color: var(--negative); }
+.btn.perigo:hover:not(:disabled) { background: var(--pill-negative-bg); }
+
+.aviso-fechado { padding: 12px 14px; border-radius: var(--radius-control); background: var(--pill-neutral-bg); color: var(--pill-neutral-ink); font-weight: 500; }
+
+/* ---------- notas fiscais do dia ---------- */
+.miniaturas { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 16px; margin-top: 16px; }
+.miniatura { display: grid; gap: 4px; }
+.miniatura img { display: block; width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border-radius: var(--radius-control); background: var(--raised); }
+.miniatura .btn { height: 32px; justify-self: start; padding: 0 8px; }
 
 .campo { display: grid; gap: 8px; align-content: start; }
 .campo label { font-weight: 500; }

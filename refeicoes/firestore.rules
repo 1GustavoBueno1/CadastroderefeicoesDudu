@@ -49,6 +49,31 @@ service cloud.firestore {
     && (!('qtdFotos' in d) || (d.qtdFotos is int && d.qtdFotos >= 0));
 }
 
+    function fotoValida(d) {
+      return d is map
+        && d.keys().hasOnly(['dataUrl', 'ordem'])
+        && d.keys().hasAll(['dataUrl', 'ordem'])
+        && d.dataUrl is string
+        && d.dataUrl.size() < 1000000
+        && d.dataUrl.matches('data:image/jpeg;base64,.*')
+        && d.ordem is int && d.ordem >= 0;
+    }
+
+    // data no formato AAAA-MM-DD (fora dele, o split falha e a regra nega);
+    // exists() enxerga o banco de antes da escrita (num batch, de antes do batch inteiro)
+    function mesFechado(empresaId, data) {
+      return exists(/databases/$(database)/documents/empresas/$(empresaId)/fechamentos/$(data.split('-')[0] + '-' + data.split('-')[1]));
+    }
+
+    function fechamentoValido(d) {
+      return d is map
+        && d.keys().hasOnly(['totalCentavos', 'qtdNotas', 'fechadoEm'])
+        && d.keys().hasAll(['totalCentavos', 'qtdNotas', 'fechadoEm'])
+        && d.totalCentavos is int && d.totalCentavos >= 0
+        && d.qtdNotas is int && d.qtdNotas >= 0
+        && d.fechadoEm == request.time;
+    }
+
     match /usuarios/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;
       allow write: if false;
@@ -64,9 +89,25 @@ service cloud.firestore {
   allow read: if autorizado();
   allow create, update: if autorizado()
     && dataValida(data)
-    && lancamentoValido(request.resource.data);
-  allow delete: if autorizado();
+    && lancamentoValido(request.resource.data)
+    && !mesFechado(empresaId, data);
+  allow delete: if autorizado() && !mesFechado(empresaId, data);
+
+  match /fotos/{fotoId} {
+    allow read: if autorizado();
+    allow create: if autorizado() && fotoValida(request.resource.data) && !mesFechado(empresaId, data);
+    allow update: if false;
+    allow delete: if autorizado() && !mesFechado(empresaId, data);
+  }
 }
+
+      match /fechamentos/{mes} {
+        allow read: if autorizado();
+        allow create: if autorizado()
+          && mes.matches('[0-9]{4}-[0-9]{2}')
+          && fechamentoValido(request.resource.data);
+        allow update, delete: if false;
+      }
 
     match /{document=**} {
       allow read, write: if false;

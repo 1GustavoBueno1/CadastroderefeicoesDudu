@@ -26,3 +26,5 @@ dist-ssr
 *dados-emulador
 .claude
 .agents
+DEPLOY.md
+.env.production.local

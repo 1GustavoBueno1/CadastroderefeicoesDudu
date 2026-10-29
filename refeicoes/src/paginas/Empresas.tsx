@@ -9,6 +9,8 @@ import { REFEICOES, type Empresa, type Refeicao } from '../types';
 
 type Carga = { estado: 'carregando' } | { estado: 'erro'; mensagem: string } | { estado: 'pronto'; empresas: Empresa[] };
 
+const NOME_MAXIMO = 100;
+
 function NovaEmpresa({ aoCriar }: { aoCriar: (id: string) => void }) {
     const [nome, setNome] = useState('');
     const [precos, setPrecos] = useState<TextoPorRefeicao>(textoVazio);
@@ -23,8 +25,12 @@ function NovaEmpresa({ aoCriar }: { aoCriar: (id: string) => void }) {
         const { valores, invalidos } = converterPrecos(precos);
         setInvalidos(invalidos);
         const nomeLimpo = nome.trim();
-        setErroNome(nomeLimpo ? null : 'Informe o nome da empresa.');
-        if (!nomeLimpo || invalidos.length) return;
+        // o banco aceita nomes de 1 a 100 caracteres
+        const nomeErro = !nomeLimpo
+            ? 'Informe o nome da empresa.'
+            : nomeLimpo.length > NOME_MAXIMO ? `Use no máximo ${NOME_MAXIMO} caracteres.` : null;
+        setErroNome(nomeErro);
+        if (nomeErro || invalidos.length) return;
 
         setEnviando(true);
         try {
@@ -45,7 +51,7 @@ function NovaEmpresa({ aoCriar }: { aoCriar: (id: string) => void }) {
             <form className="form" onSubmit={aoEnviar} noValidate>
                 <div className="campo">
                     <label htmlFor="nome-empresa">Nome</label>
-                    <input id="nome-empresa" className="entrada" autoComplete="off" value={nome}
+                    <input id="nome-empresa" className="entrada" autoComplete="off" value={nome} maxLength={NOME_MAXIMO}
                         aria-invalid={!!erroNome} aria-describedby={erroNome ? 'nome-empresa-erro' : undefined}
                         onChange={(e) => setNome(e.target.value)} />
                     {erroNome && <span id="nome-empresa-erro" className="erro-campo">{erroNome}</span>}
