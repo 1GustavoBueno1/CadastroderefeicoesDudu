@@ -8,24 +8,21 @@ service cloud.firestore {
 
 
 
-    function porRefeicaoValido(m) {
-      return  m is map
-      && m.keys().hasOnly(['cafeManha', 'almoco', 'cafeTarde', 'janta'])
-      && m.keys().hasAll(['cafeManha', 'almoco', 'cafeTarde', 'janta'])
-      && m.cafeManha is int && m.cafeManha >= 0
-      && m.almoco is int && m.almoco >=0
-      && m.cafeTarde is int && m.cafeTarde >= 0
-      && m.janta is int && m.janta >= 0;
+    function empresaValida(d) {
+      return d is map
+      && d.keys().hasOnly(['nome', 'ativa'])
+      && d.keys().hasAll(['nome', 'ativa'])
+      && d.nome is string && d.nome.size() > 0 && d.nome.size() <= 100
+      && d.ativa is bool;
     }
 
-    function empresaValida(d) {
-
+    function itemValido(d) {
       return d is map
-      && d.keys().hasOnly(['nome', 'precosPadrao', 'ativa'])
-      && d.keys().hasAll(['nome', 'precosPadrao', 'ativa'])
+      && d.keys().hasOnly(['nome', 'precoCentavos', 'ativo'])
+      && d.keys().hasAll(['nome', 'precoCentavos', 'ativo'])
       && d.nome is string && d.nome.size() > 0 && d.nome.size() <= 100
-      && d.ativa is bool
-      && porRefeicaoValido(d.precosPadrao);
+      && d.precoCentavos is int && d.precoCentavos >= 0
+      && d.ativo is bool;
     }
 
     function autorizado() {
@@ -33,19 +30,14 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid));
     }
 
+    // As regras não têm laço: não dá para conferir cada item do mapa nem a soma do total.
+    // Isso fica no service (salvarLancamento); aqui só a estrutura.
     function lancamentoValido(d) {
   return d is map
-    && d.keys().hasAll(['quantidades', 'precos', 'totalCentavos'])
-    && d.keys().hasOnly(['quantidades', 'precos', 'totalCentavos', 'qtdFotos'])
-    && porRefeicaoValido(d.quantidades)
-    && porRefeicaoValido(d.precos)
-    && d.totalCentavos is int
-    && d.totalCentavos == (
-         d.quantidades.cafeManha * d.precos.cafeManha
-       + d.quantidades.almoco    * d.precos.almoco
-       + d.quantidades.cafeTarde * d.precos.cafeTarde
-       + d.quantidades.janta     * d.precos.janta
-       )
+    && d.keys().hasAll(['itens', 'totalCentavos'])
+    && d.keys().hasOnly(['itens', 'totalCentavos', 'qtdFotos'])
+    && d.itens is map && d.itens.size() > 0
+    && d.totalCentavos is int && d.totalCentavos >= 0
     && (!('qtdFotos' in d) || (d.qtdFotos is int && d.qtdFotos >= 0));
 }
 
@@ -77,6 +69,12 @@ service cloud.firestore {
     match /usuarios/{uid} {
       allow read: if request.auth != null && request.auth.uid == uid;
       allow write: if false;
+    }
+
+    match /itens/{itemId} {
+      allow read: if autorizado();
+      allow create, update: if autorizado() && itemValido(request.resource.data);
+      allow delete: if false;
     }
 
     match /empresas/{empresaId} {

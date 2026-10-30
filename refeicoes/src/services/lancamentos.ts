@@ -1,9 +1,9 @@
 import {
-    collection, doc, getDoc, getDocs, setDoc, query, where, orderBy, documentId, writeBatch, increment,
+    collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where, orderBy, documentId, writeBatch, increment,
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { exigirMesAberto } from './fechamentos';
-import { REFEICOES, calcularTotal, type Lancamento, type PorRefeicao } from '../types';
+import { calcularTotal, type ItensDoDia, type Lancamento } from '../types';
 
 const COLECAO_EMPRESAS = 'empresas';
 const COLECAO_LANCAMENTOS = 'lancamentos';
@@ -27,25 +27,23 @@ export async function buscarLancamento(empresaId: string, data: string): Promise
     return { data: snap.id, ...snap.data() } as Lancamento
 }
 
-export async function salvarLancamento(
-    empresaId: string,
-    data: string,
-    quantidades: PorRefeicao,
-    precos: PorRefeicao,
-): Promise<void> {
+// itens: já montados pela tela com montarItensDoDia (nome e preço de cada item decididos lá)
+export async function salvarLancamento(empresaId: string, data: string, itens: ItensDoDia): Promise<void> {
     if (!FORMATO_DATA.test(data)) throw new Error('Data inválida.');
     await exigirMesAberto(empresaId, data);
-    for (const r of REFEICOES) {
-        if (!inteiroNaoNegativo(quantidades[r])) throw new Error('Quantidade inválida.');
-        if (!inteiroNaoNegativo(precos[r])) throw new Error('Preço inválido.');
+    if (Object.keys(itens).length === 0) throw new Error('Informe ao menos um item.');
+    for (const i of Object.values(itens)) {
+        if (!inteiroNaoNegativo(i.quantidade) || i.quantidade === 0) throw new Error('Quantidade inválida.');
+        if (!inteiroNaoNegativo(i.precoCentavos)) throw new Error('Preço inválido.');
+        if (typeof i.nome !== 'string' || i.nome.trim() === '') throw new Error('Item sem nome.');
     }
-    const totalCentavos = calcularTotal(quantidades, precos);
-    // merge: não apagar qtdFotos, que é de outro service
-    await setDoc(
-        doc(colecaoLancamentos(empresaId), data),
-        { quantidades, precos, totalCentavos },
-        { merge: true },
-    );
+    // as regras não somam o mapa: o total é conferido só aqui
+    const totalCentavos = calcularTotal(itens);
+    const ref = doc(colecaoLancamentos(empresaId), data);
+    // Sem merge: com merge o mapa itens seria mesclado e um item tirado do dia continuaria gravado.
+    // updateDoc troca o campo itens inteiro e não mexe no qtdFotos, que é de outro service.
+    if ((await getDoc(ref)).exists()) await updateDoc(ref, { itens, totalCentavos });
+    else await setDoc(ref, { itens, totalCentavos });
 }
 
 export async function excluirLancamento(empresaId: string, data: string): Promise<void> {
