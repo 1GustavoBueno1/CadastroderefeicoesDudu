@@ -6,6 +6,7 @@ import { buscarFechamento } from '../services/fechamentos';
 import { formatarCentavos, parseReais } from '../lib/dinheiro';
 import { dataLocal, dataPorExtenso, dataValida, formatarData } from '../lib/datas';
 import { NotasFiscais } from '../componentes/NotasFiscais';
+import { Trilha } from '../componentes/Moldura';
 import {
     NOMES_REFEICOES, converterPrecos, converterQuantidades, parseQuantidade, precosParaTexto, textoVazio,
     type TextoPorRefeicao,
@@ -256,10 +257,11 @@ export function Dia() {
 
     return (
         <main className="canvas">
-            <nav className="trilha" aria-label="Caminho">
-                <Link to="/">Empresas</Link><span aria-hidden="true">/</span>
-                <Link to={`/empresas/${empresaId}?mes=${data.slice(0, 7)}`}>{nomeEmpresa}</Link><span aria-hidden="true">/</span>
-            </nav>
+            <Trilha>
+                <Link to="/">Empresas</Link><span className="sep" aria-hidden="true">/</span>
+                <Link to={`/empresas/${empresaId}?mes=${data.slice(0, 7)}`}>{nomeEmpresa}</Link>
+                {valida && <><span className="sep" aria-hidden="true">/</span><span aria-current="page">{formatarData(data)}</span></>}
+            </Trilha>
 
             {!valida && (
                 <div className="titulo"><div><h1>Data inválida</h1><p className="sub">Volte para a empresa e escolha o dia de novo.</p></div></div>

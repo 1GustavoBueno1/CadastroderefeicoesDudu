@@ -5,6 +5,7 @@ import { formatarCentavos } from '../lib/dinheiro';
 import { NOMES_REFEICOES, converterPrecos, textoVazio, type TextoPorRefeicao } from '../lib/refeicoes';
 import { CamposPrecos } from '../componentes/CamposPrecos';
 import { Itens } from '../componentes/Itens';
+import { Trilha, useMoldura } from '../componentes/Moldura';
 import { REFEICOES, type Empresa, type Refeicao } from '../types';
 
 type Carga = { estado: 'carregando' } | { estado: 'erro'; mensagem: string } | { estado: 'pronto'; empresas: Empresa[] };
@@ -74,6 +75,7 @@ function NovaEmpresa({ aoCriar }: { aoCriar: (id: string) => void }) {
 
 export function Empresas() {
     const navigate = useNavigate();
+    const { recarregarEmpresas } = useMoldura();
     const [carga, setCarga] = useState<Carga>({ estado: 'carregando' });
     const [mostrarDesativadas, setMostrarDesativadas] = useState(false);
     const [criadaId, setCriadaId] = useState<string | null>(null);
@@ -96,6 +98,7 @@ export function Empresas() {
 
     return (
         <main className="canvas">
+            <Trilha><span aria-current="page">Empresas</span></Trilha>
             <div className="titulo">
                 <div>
                     <h1>Empresas</h1>
@@ -180,7 +183,7 @@ export function Empresas() {
                 </section>
 
                 <div className="span-4">
-                    <NovaEmpresa aoCriar={(id) => { setCriadaId(id); carregar(); }} />
+                    <NovaEmpresa aoCriar={(id) => { setCriadaId(id); carregar(); recarregarEmpresas(); }} />
                 </div>
             </div>
         </main>

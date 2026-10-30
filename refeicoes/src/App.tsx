@@ -1,8 +1,8 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { observarSessao, sair, verificarAcesso } from './services/auth';
-import { Marca } from './componentes/Marca';
-import { Topo } from './componentes/Topo';
+import { Moldura } from './componentes/Moldura';
+import { TelaSolta } from './componentes/TelaSolta';
 import { Login } from './paginas/Login';
 import { Empresas } from './paginas/Empresas';
 import { Empresa } from './paginas/Empresa';
@@ -13,20 +13,9 @@ type Usuario = { uid: string; email: string | null };
 type Sessao = Usuario | null | undefined;
 type Acesso = 'liberado' | 'negado' | 'erro';
 
-function TelaSolta({ children }: { children: ReactNode }) {
-    return (
-        <main className="tela-solta">
-            <div className="cartao-solto">
-                <Marca />
-                {children}
-            </div>
-        </main>
-    );
-}
-
 function Carregando() {
     return (
-        <main className="tela-solta">
+        <main className="tela-carregando">
             <p className="carregando" role="status">Carregando…</p>
         </main>
     );
@@ -79,13 +68,14 @@ export default function App() {
 
     return (
         <BrowserRouter>
-            <Topo email={sessao.email} />
-            <Routes>
-                <Route path="/" element={<Empresas />} />
-                <Route path="/empresas/:empresaId" element={<Empresa />} />
-                <Route path="/empresas/:empresaId/dia/:data" element={<Dia />} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            <Moldura email={sessao.email}>
+                <Routes>
+                    <Route path="/" element={<Empresas />} />
+                    <Route path="/empresas/:empresaId" element={<Empresa />} />
+                    <Route path="/empresas/:empresaId/dia/:data" element={<Dia />} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+            </Moldura>
         </BrowserRouter>
     );
 }

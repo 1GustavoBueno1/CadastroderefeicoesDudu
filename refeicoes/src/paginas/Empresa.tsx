@@ -11,6 +11,7 @@ import { NOMES_REFEICOES, converterPrecos, precosParaTexto, type TextoPorRefeica
 import { CamposPrecos } from '../componentes/CamposPrecos';
 import { Itens } from '../componentes/Itens';
 import { GraficoMes } from '../componentes/GraficoMes';
+import { Trilha, useMoldura } from '../componentes/Moldura';
 import { REFEICOES, type Empresa as TipoEmpresa, type Fechamento, type Lancamento, type Refeicao } from '../types';
 
 type CargaEmpresa =
@@ -222,6 +223,7 @@ export function Empresa() {
     const { empresaId = '' } = useParams();
     const navigate = useNavigate();
     const [busca, setBusca] = useSearchParams();
+    const { recarregarEmpresas } = useMoldura();
     const mesUrl = busca.get('mes') ?? '';
     const mes = mesValido(mesUrl) ? mesUrl : mesAtual();
 
@@ -277,7 +279,7 @@ export function Empresa() {
     if (cargaEmpresa.estado === 'erro' || cargaEmpresa.estado === 'inexistente') {
         return (
             <main className="canvas">
-                <nav className="trilha" aria-label="Caminho"><Link to="/">Empresas</Link></nav>
+                <Trilha><Link to="/">Empresas</Link></Trilha>
                 <div className="titulo">
                     <div>
                         <h1>{cargaEmpresa.estado === 'inexistente' ? 'Empresa não encontrada' : 'Não foi possível abrir a empresa'}</h1>
@@ -298,6 +300,10 @@ export function Empresa() {
     const porRefeicao = Object.fromEntries(
         REFEICOES.map((r) => [r, lancamentos.reduce((s, l) => s + l.quantidades[r], 0)]),
     ) as Record<Refeicao, number>;
+    // notas fiscais do mês: o que a operadora confere antes de fechar
+    const notasMes = lancamentos.reduce((s, l) => s + (l.qtdFotos ?? 0), 0);
+    const diasComNota = lancamentos.filter((l) => (l.qtdFotos ?? 0) > 0).length;
+    const fechamento = cargaFechamento.estado === 'pronto' ? cargaFechamento.fechamento : null;
     const carregandoMes = cargaMes.estado === 'carregando';
     const valor = (texto: string) => (carregandoMes ? <span className="esqueleto" /> : texto);
 
@@ -307,6 +313,7 @@ export function Empresa() {
         try {
             await atualizarEmpresa(empresa.id, { ativa: !empresa.ativa });
             setCargaEmpresa({ estado: 'pronto', empresa: { ...empresa, ativa: !empresa.ativa } });
+            recarregarEmpresas();
         } catch (e) {
             setErroStatus((e as Error).message);
         } finally {
@@ -316,7 +323,10 @@ export function Empresa() {
 
     return (
         <main className="canvas">
-            <nav className="trilha" aria-label="Caminho"><Link to="/">Empresas</Link><span aria-hidden="true">/</span></nav>
+            <Trilha>
+                <Link to="/">Empresas</Link><span className="sep" aria-hidden="true">/</span>
+                <span aria-current="page">{empresa.nome}</span>
+            </Trilha>
             <div className="titulo">
                 <div>
                     <h1>
@@ -326,7 +336,8 @@ export function Empresa() {
                     <p className="sub">
                         {cargaMes.estado === 'pronto'
                             ? lancamentos.length
-                                ? `${lancamentos.length} ${lancamentos.length === 1 ? 'dia lançado' : 'dias lançados'} em ${nomeDoMes(mes)}.`
+                                ? `${lancamentos.length} ${lancamentos.length === 1 ? 'dia lançado' : 'dias lançados'} em ${nomeDoMes(mes)}`
+                                    + (fechamento ? ', mês fechado.' : ` · ${diasComNota} com nota fiscal.`)
                                 : `Nenhum dia lançado em ${nomeDoMes(mes)}.`
                             : nomeDoMes(mes)}
                     </p>
@@ -366,13 +377,21 @@ export function Empresa() {
                     <div className="kpi-rotulo">Dias lançados</div>
                     <div className="kpi-valor">{valor(String(lancamentos.length))}<small>de {diasNoMes(mes)}</small></div>
                 </div>
+                <div className="kpi">
+                    <div className="kpi-rotulo">Notas fiscais</div>
+                    {fechamento
+                        ? <div className="kpi-valor">{inteiro.format(fechamento.qtdNotas)}<small>apagadas no fechamento</small></div>
+                        : <div className="kpi-valor">{valor(inteiro.format(notasMes))}<small>em {diasComNota} {diasComNota === 1 ? 'dia' : 'dias'}</small></div>}
+                </div>
             </div>
 
             <div className="grade">
                 <section className="painel span-8" aria-labelledby="dias-do-mes">
                     <header>
                         <h2 id="dias-do-mes">Total por dia</h2>
-                        <span className="meta">{nomeDoMes(mes)}</span>
+                        {diasComNota > 0
+                            ? <span className="legenda"><i aria-hidden="true" />dia com nota fiscal</span>
+                            : <span className="meta">{nomeDoMes(mes)}</span>}
                     </header>
 
                     {cargaMes.estado === 'erro' && (
@@ -391,6 +410,7 @@ export function Empresa() {
                                         <tr>
                                             <th>Dia</th>
                                             {REFEICOES.map((r) => <th key={r} className="n">{NOMES_REFEICOES[r]}</th>)}
+                                            <th className="n">Notas</th>
                                             <th className="n">Total do dia</th>
                                         </tr>
                                     </thead>
@@ -399,12 +419,13 @@ export function Empresa() {
                                             <tr key={i}>
                                                 <td className="l1"><span className="esqueleto" /></td>
                                                 {REFEICOES.map((r) => <td key={r} className="n"><span className="esqueleto" style={{ width: '3ch' }} /></td>)}
+                                                <td className="n"><span className="esqueleto" style={{ width: '2ch' }} /></td>
                                                 <td className="n l1"><span className="esqueleto" /></td>
                                             </tr>
                                         ))}
                                         {cargaMes.estado === 'pronto' && lancamentos.length === 0 && (
                                             <tr>
-                                                <td colSpan={6} className="l1 vazio">Nenhum dia lançado neste mês. Use "Lançar um dia" para começar.</td>
+                                                <td colSpan={7} className="l1 vazio">Nenhum dia lançado neste mês. Use "Lançar um dia" para começar.</td>
                                             </tr>
                                         )}
                                         {lancamentos.map((l) => (
@@ -418,9 +439,15 @@ export function Empresa() {
                                                 {REFEICOES.map((r) => (
                                                     <td key={r} className="n">{inteiro.format(l.quantidades[r])}</td>
                                                 ))}
+                                                <td className="n">
+                                                    {(l.qtdFotos ?? 0) > 0 ? l.qtdFotos : <span className="traco" aria-label="sem nota">—</span>}
+                                                </td>
                                                 <td className="n l1">{formatarCentavos(l.totalCentavos)}</td>
                                                 <td className="l2 num">
-                                                    <Itens itens={REFEICOES.map((r) => `${NOMES_REFEICOES[r]} ${l.quantidades[r]}`)} />
+                                                    <Itens itens={[
+                                                        ...REFEICOES.map((r) => `${NOMES_REFEICOES[r]} ${l.quantidades[r]}`),
+                                                        ...((l.qtdFotos ?? 0) > 0 ? [`${l.qtdFotos} ${l.qtdFotos === 1 ? 'nota' : 'notas'}`] : []),
+                                                    ]} />
                                                 </td>
                                             </tr>
                                         ))}
@@ -430,6 +457,7 @@ export function Empresa() {
                                             <tr>
                                                 <td className="l1">Total do mês</td>
                                                 {REFEICOES.map((r) => <td key={r} className="n">{inteiro.format(porRefeicao[r])}</td>)}
+                                                <td className="n">{inteiro.format(notasMes)}</td>
                                                 <td className="n l1">{formatarCentavos(totalMes)}</td>
                                                 <td className="l2 num">
                                                     <Itens itens={REFEICOES.map((r) => `${NOMES_REFEICOES[r]} ${inteiro.format(porRefeicao[r])}`)} />

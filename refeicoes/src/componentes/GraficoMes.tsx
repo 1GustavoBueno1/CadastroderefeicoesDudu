@@ -6,7 +6,7 @@ import type { Lancamento } from '../types';
 const ALTURA = 180;
 const ESQ = 64;      // faixa dos valores do eixo y
 const TOPO = 8;
-const BASE = 24;     // faixa dos dias no eixo x
+const BASE = 34;     // faixa dos pontos de nota fiscal e dos dias no eixo x
 const DIAS_NO_EIXO = [1, 8, 15, 22, 29];
 
 const reaisInteiros = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
@@ -41,6 +41,7 @@ export function GraficoMes({ mes, lancamentos, aoAbrirDia }: Props) {
 
     const dias = diasNoMes(mes);
     const porDia = new Map(lancamentos.map((l) => [Number(l.data.slice(8, 10)), l.totalCentavos]));
+    const comNota = new Set(lancamentos.filter((l) => (l.qtdFotos ?? 0) > 0).map((l) => Number(l.data.slice(8, 10))));
     const maior = Math.max(0, ...porDia.values());
     const marcas = marcasY(maior);
     const topo = marcas[marcas.length - 1];
@@ -67,7 +68,7 @@ export function GraficoMes({ mes, lancamentos, aoAbrirDia }: Props) {
                         </g>
                     ))}
                     {DIAS_NO_EIXO.filter((d) => d <= dias).map((d) => (
-                        <text key={d} x={xCentro(d)} y={ALTURA - 6} textAnchor="middle">{d}</text>
+                        <text key={d} x={xCentro(d)} y={ALTURA - 4} textAnchor="middle">{d}</text>
                     ))}
                     {Array.from({ length: dias }, (_, i) => i + 1).map((d) => {
                         const total = porDia.get(d);
@@ -78,10 +79,11 @@ export function GraficoMes({ mes, lancamentos, aoAbrirDia }: Props) {
                             <g key={d}>
                                 <rect className="barra-alvo" x={ESQ + passo * (d - 1)} y={TOPO} width={passo} height={alturaPlot}
                                     onClick={() => aoAbrirDia(data)}>
-                                    <title>{`Dia ${d}: ${formatarCentavos(total)}`}</title>
+                                    <title>{`Dia ${d}: ${formatarCentavos(total)}${comNota.has(d) ? ' · com nota fiscal' : ''}`}</title>
                                 </rect>
                                 <rect className="barra" x={xCentro(d) - larguraBarra / 2} y={TOPO + alturaPlot - h}
                                     width={larguraBarra} height={h} />
+                                {comNota.has(d) && <circle className="nota" cx={xCentro(d)} cy={TOPO + alturaPlot + 8} r={2.5} />}
                             </g>
                         );
                     })}

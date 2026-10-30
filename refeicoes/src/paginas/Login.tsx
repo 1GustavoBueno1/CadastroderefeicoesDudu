@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { entrar } from '../services/auth';
-import { Marca } from '../componentes/Marca';
+import { TelaSolta } from '../componentes/TelaSolta';
 
 export function Login() {
     const [email, setEmail] = useState('');
@@ -22,11 +22,9 @@ export function Login() {
     }
 
     return (
-        <main className="tela-solta">
-            <div className="cartao-solto">
-                <Marca />
+        <TelaSolta>
                 <h1>Entrar</h1>
-                <p>Controle de refeições servidas por empresa.</p>
+                <p>Use o e-mail e a senha cadastrados para você.</p>
                 <form className="form" onSubmit={aoEnviar} noValidate>
                     <div className="campo">
                         <label htmlFor="email">E-mail</label>
@@ -43,7 +41,6 @@ export function Login() {
                         {enviando ? 'Entrando…' : 'Entrar'}
                     </button>
                 </form>
-            </div>
-        </main>
+        </TelaSolta>
     );
 }
