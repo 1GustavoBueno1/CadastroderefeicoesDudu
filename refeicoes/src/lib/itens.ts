@@ -73,21 +73,22 @@ export type ResumoMes = { porItem: TotalDoItem[]; totalCentavos: number };
 // Totais do mês com os preços gravados em cada lançamento (não o preço atual do catálogo).
 // Agrupa por id: um item renomeado no meio do mês aparece uma vez só, com o nome do dia mais recente.
 export function resumirMes(lancamentos: Lancamento[]): ResumoMes {
-    const porId = new Map<string, TotalDoItem & { data: string }>();
+    const porId = new Map<string, TotalDoItem>();
+    // data do lançamento de onde veio o nome atual de cada item
+    const dataDoNome = new Map<string, string>();
     let totalCentavos = 0;
     for (const l of lancamentos) {
         for (const [itemId, i] of Object.entries(l.itens)) {
-            const t = porId.get(itemId) ?? { itemId, nome: i.nome, quantidade: 0, valorCentavos: 0, data: l.data };
+            const t = porId.get(itemId) ?? { itemId, nome: i.nome, quantidade: 0, valorCentavos: 0 };
             t.quantidade += i.quantidade;
             t.valorCentavos += i.quantidade * i.precoCentavos;
-            if (l.data >= t.data) {
+            if (l.data >= (dataDoNome.get(itemId) ?? '')) {
                 t.nome = i.nome;
-                t.data = l.data;
+                dataDoNome.set(itemId, l.data);
             }
             porId.set(itemId, t);
         }
         totalCentavos += l.totalCentavos;
     }
-    const porItem = ordenarPorNome([...porId.values()]).map(({ data: _, ...t }) => t);
-    return { porItem, totalCentavos };
+    return { porItem: ordenarPorNome([...porId.values()]), totalCentavos };
 }

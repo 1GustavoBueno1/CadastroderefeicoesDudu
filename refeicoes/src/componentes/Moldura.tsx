@@ -36,6 +36,14 @@ function IconeEmpresas() {
     );
 }
 
+function IconeItens() {
+    return (
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+            <path d="M2 4.5 8 1.5l6 3v7l-6 3-6-3zM2 4.5l6 3 6-3M8 7.5v7" />
+        </svg>
+    );
+}
+
 export function Moldura({ email, children }: { email: string | null; children: ReactNode }) {
     const { pathname } = useLocation();
     const [slotTrilha, setSlotTrilha] = useState<HTMLElement | null>(null);
@@ -84,6 +92,9 @@ export function Moldura({ email, children }: { email: string | null; children: R
                     <nav className="nav-grupo" aria-label="Telas">
                         <Link to="/" className="nav-item" aria-current={pathname === '/' ? 'page' : undefined}>
                             <IconeEmpresas /><span>Empresas</span>
+                        </Link>
+                        <Link to="/itens" className="nav-item" aria-current={pathname === '/itens' ? 'page' : undefined}>
+                            <IconeItens /><span>Itens</span>
                         </Link>
                     </nav>
 

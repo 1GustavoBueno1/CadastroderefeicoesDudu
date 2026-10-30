@@ -7,6 +7,7 @@ import { Login } from './paginas/Login';
 import { Empresas } from './paginas/Empresas';
 import { Empresa } from './paginas/Empresa';
 import { Dia } from './paginas/Dia';
+import { Itens } from './paginas/Itens';
 
 type Usuario = { uid: string; email: string | null };
 // undefined = o estado inicial da sessão ainda não chegou
@@ -71,6 +72,7 @@ export default function App() {
             <Moldura email={sessao.email}>
                 <Routes>
                     <Route path="/" element={<Empresas />} />
+                    <Route path="/itens" element={<Itens />} />
                     <Route path="/empresas/:empresaId" element={<Empresa />} />
                     <Route path="/empresas/:empresaId/dia/:data" element={<Dia />} />
                     <Route path="*" element={<Navigate to="/" replace />} />

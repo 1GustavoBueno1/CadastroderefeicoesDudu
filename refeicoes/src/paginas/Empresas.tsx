@@ -1,12 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { criarEmpresa, listarEmpresas } from '../services/empresas';
-import { formatarCentavos } from '../lib/dinheiro';
-import { NOMES_REFEICOES, converterPrecos, textoVazio, type TextoPorRefeicao } from '../lib/refeicoes';
-import { CamposPrecos } from '../componentes/CamposPrecos';
-import { Itens } from '../componentes/Itens';
 import { Trilha, useMoldura } from '../componentes/Moldura';
-import { REFEICOES, type Empresa, type Refeicao } from '../types';
+import type { Empresa } from '../types';
 
 type Carga = { estado: 'carregando' } | { estado: 'erro'; mensagem: string } | { estado: 'pronto'; empresas: Empresa[] };
 
@@ -14,8 +10,6 @@ const NOME_MAXIMO = 100;
 
 function NovaEmpresa({ aoCriar }: { aoCriar: (id: string) => void }) {
     const [nome, setNome] = useState('');
-    const [precos, setPrecos] = useState<TextoPorRefeicao>(textoVazio);
-    const [invalidos, setInvalidos] = useState<Refeicao[]>([]);
     const [erroNome, setErroNome] = useState<string | null>(null);
     const [erro, setErro] = useState<string | null>(null);
     const [enviando, setEnviando] = useState(false);
@@ -23,21 +17,18 @@ function NovaEmpresa({ aoCriar }: { aoCriar: (id: string) => void }) {
     async function aoEnviar(e: FormEvent) {
         e.preventDefault();
         setErro(null);
-        const { valores, invalidos } = converterPrecos(precos);
-        setInvalidos(invalidos);
         const nomeLimpo = nome.trim();
         // o banco aceita nomes de 1 a 100 caracteres
         const nomeErro = !nomeLimpo
             ? 'Informe o nome da empresa.'
             : nomeLimpo.length > NOME_MAXIMO ? `Use no máximo ${NOME_MAXIMO} caracteres.` : null;
         setErroNome(nomeErro);
-        if (nomeErro || invalidos.length) return;
+        if (nomeErro) return;
 
         setEnviando(true);
         try {
-            const id = await criarEmpresa({ nome: nomeLimpo, precosPadrao: valores, ativa: true });
+            const id = await criarEmpresa({ nome: nomeLimpo, ativa: true });
             setNome('');
-            setPrecos(textoVazio());
             aoCriar(id);
         } catch (err) {
             setErro((err as Error).message);
@@ -56,11 +47,6 @@ function NovaEmpresa({ aoCriar }: { aoCriar: (id: string) => void }) {
                         aria-invalid={!!erroNome} aria-describedby={erroNome ? 'nome-empresa-erro' : undefined}
                         onChange={(e) => setNome(e.target.value)} />
                     {erroNome && <span id="nome-empresa-erro" className="erro-campo">{erroNome}</span>}
-                </div>
-                <div className="campo">
-                    <span className="dica">Preço padrão de cada refeição</span>
-                    <CamposPrecos idBase="novo-preco" valores={precos} invalidos={invalidos}
-                        aoMudar={(r, t) => setPrecos((p) => ({ ...p, [r]: t }))} />
                 </div>
                 {erro && <p className="alerta" role="alert">{erro}</p>}
                 <div className="form-acoes">
@@ -113,7 +99,7 @@ export function Empresas() {
             <div className="grade">
                 <section className="painel span-8" aria-labelledby="lista-empresas">
                     <header>
-                        <h2 id="lista-empresas">Preços padrão por empresa</h2>
+                        <h2 id="lista-empresas">Empresas cadastradas</h2>
                         <label className="caixa-check">
                             <input type="checkbox" checked={mostrarDesativadas}
                                 onChange={(e) => setMostrarDesativadas(e.target.checked)} />
@@ -140,19 +126,16 @@ export function Empresas() {
                                 <thead>
                                     <tr>
                                         <th>Empresa</th>
-                                        {REFEICOES.map((r) => <th key={r} className="n">{NOMES_REFEICOES[r]}</th>)}
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {carga.estado === 'carregando' && [0, 1, 2].map((i) => (
                                         <tr key={i}>
-                                            <td className="l1"><span className="esqueleto" style={{ width: '14ch' }} /></td>
-                                            {REFEICOES.map((r) => <td key={r} className="n"><span className="esqueleto" /></td>)}
-                                        </tr>
+                                            <td className="l1"><span className="esqueleto" style={{ width: '14ch' }} /></td>                                        </tr>
                                     ))}
                                     {carga.estado === 'pronto' && visiveis.length === 0 && (
                                         <tr>
-                                            <td colSpan={5} className="l1 vazio">
+                                            <td className="l1 vazio">
                                                 {todas.length === 0
                                                     ? 'Nenhuma empresa cadastrada. Cadastre a primeira ao lado.'
                                                     : 'Nenhuma empresa ativa. Marque "Mostrar desativadas" para ver as outras.'}
@@ -167,14 +150,7 @@ export function Empresas() {
                                                     {e.nome}
                                                 </Link>
                                                 {!e.ativa && <span className="pill">Desativada</span>}
-                                            </td>
-                                            {REFEICOES.map((r) => (
-                                                <td key={r} className="n">{formatarCentavos(e.precosPadrao[r])}</td>
-                                            ))}
-                                            <td className="l2 num">
-                                                <Itens itens={REFEICOES.map((r) => `${NOMES_REFEICOES[r]} ${formatarCentavos(e.precosPadrao[r])}`)} />
-                                            </td>
-                                        </tr>
+                                            </td>                                        </tr>
                                     ))}
                                 </tbody>
                             </table>
