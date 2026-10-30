@@ -1,9 +1,12 @@
 // Carregado sob demanda: as telas importam com import('../lib/pdf') para o pdf-lib não pesar o bundle inicial.
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib';
-import { REFEICOES, type Empresa, type Foto, type Lancamento, type PorRefeicao } from '../types';
+import type { Empresa, Foto, Lancamento } from '../types';
 import { formatarCentavos } from './dinheiro';
 import { diaDaSemana, formatarData, nomeDoMes } from './datas';
-import { NOMES_REFEICOES } from './refeicoes';
+import { resumirMes, textosDoDia } from './itens';
+
+// o resumo é calculado em lib/itens (a tela da empresa usa sem carregar o pdf-lib)
+export { resumirMes, type ResumoMes } from './itens';
 
 const A4: [number, number] = [595.28, 841.89];
 const MARGEM = 40;
@@ -18,27 +21,6 @@ const DESTAQUE_TINTA = rgb(0.42, 0.11, 0.24);
 const inteiro = new Intl.NumberFormat('pt-BR');
 
 type Fontes = { normal: PDFFont; negrito: PDFFont };
-
-export type ResumoMes = {
-    quantidades: PorRefeicao;
-    valores: PorRefeicao;
-    totalCentavos: number;
-};
-
-// Totais do mês com os preços gravados em cada lançamento (não o preço padrão atual da empresa)
-export function resumirMes(lancamentos: Lancamento[]): ResumoMes {
-    const quantidades: PorRefeicao = { cafeManha: 0, almoco: 0, cafeTarde: 0, janta: 0 };
-    const valores: PorRefeicao = { cafeManha: 0, almoco: 0, cafeTarde: 0, janta: 0 };
-    let totalCentavos = 0;
-    for (const l of lancamentos) {
-        for (const r of REFEICOES) {
-            quantidades[r] += l.quantidades[r];
-            valores[r] += l.quantidades[r] * l.precos[r];
-        }
-        totalCentavos += l.totalCentavos;
-    }
-    return { quantidades, valores, totalCentavos };
-}
 
 export function legendaNota(empresa: Empresa, data: string, posicao: number, total: number): string {
     return `${empresa.nome} — ${formatarData(data)} — nota ${posicao} de ${total}`;
@@ -140,17 +122,58 @@ export async function gerarPdfDia(empresa: Empresa, lancamento: Lancamento, foto
 // ---------- resumo do mês ----------
 
 const ALTURA_LINHA = 18;
+// linhas seguintes de uma mesma célula que quebrou
+const ENTRELINHA = 12;
 const TAMANHO_TABELA = 9;
-// Data | 4 refeições | Total do dia: 95 + 4 × 80 + 100 = 515 (largura útil do A4 com 40 de margem)
+// Data | Itens | Total do dia: 95 + 320 + 100 = 515 (largura útil do A4 com 40 de margem)
 const COLUNA_DATA = 95;
-const COLUNA_REFEICAO = 80;
-const COLUNA_TOTAL = LARGURA_UTIL - COLUNA_DATA - 4 * COLUNA_REFEICAO;
+const COLUNA_TOTAL = 100;
+const COLUNA_ITENS = LARGURA_UTIL - COLUNA_DATA - COLUNA_TOTAL;
+const X_ITENS = MARGEM + COLUNA_DATA;
+// folga entre o texto dos itens e o total
+const LARGURA_TEXTO_ITENS = COLUNA_ITENS - 16;
+const DIREITA_TOTAL = MARGEM + LARGURA_UTIL;
+// altura que cabe numa página nova, já descontado o cabeçalho de continuação e o da tabela
+const ESPACO_PAGINA = A4[1] - 2 * MARGEM - 60;
 
-// borda direita de cada coluna numérica
-function direitaRefeicao(i: number): number {
-    return MARGEM + COLUNA_DATA + (i + 1) * COLUNA_REFEICAO;
+// Quebra em linhas que cabem na largura, sem cortar nada: tenta não partir um item
+// ("Coca lata 1") entre linhas; um item maior que a linha quebra por palavra, e palavra maior por caractere.
+export function quebrarLinhas(fonte: PDFFont, partes: string[], tamanho: number, largura: number, separador = ' · '): string[] {
+    const cabe = (t: string) => fonte.widthOfTextAtSize(t, tamanho) <= largura;
+    const linhas: string[] = [];
+    let atual = '';
+    for (const parte of partes.map((p) => seguro(fonte, p))) {
+        const junto = atual ? atual + separador + parte : parte;
+        if (cabe(junto)) {
+            atual = junto;
+            continue;
+        }
+        if (atual) linhas.push(atual);
+        atual = '';
+        if (cabe(parte)) {
+            atual = parte;
+            continue;
+        }
+        for (const palavra of parte.split(' ')) {
+            const comPalavra = atual ? `${atual} ${palavra}` : palavra;
+            if (cabe(comPalavra)) {
+                atual = comPalavra;
+                continue;
+            }
+            if (atual) linhas.push(atual);
+            atual = '';
+            for (const c of palavra) {
+                if (atual && !cabe(atual + c)) {
+                    linhas.push(atual);
+                    atual = '';
+                }
+                atual += c;
+            }
+        }
+    }
+    if (atual || linhas.length === 0) linhas.push(atual);
+    return linhas;
 }
-const DIREITA_TOTAL = MARGEM + COLUNA_DATA + 4 * COLUNA_REFEICAO + COLUNA_TOTAL;
 
 export async function gerarPdfMes(
     empresa: Empresa,
@@ -163,35 +186,36 @@ export async function gerarPdfMes(
     const ordenados = dias
         .filter((d) => d.lancamento.data.startsWith(`${mes}-`))
         .sort((a, b) => a.lancamento.data.localeCompare(b.lancamento.data));
-    const titulo = `Relatório de refeições — ${nomeDoMes(mes)}`;
+    const titulo = `Relatório de itens — ${nomeDoMes(mes)}`;
     const { pdf, fontes } = await criarDocumento(`${empresa.nome} — ${titulo}`);
     const { normal, negrito } = fontes;
     const resumo = resumirMes(ordenados.map((d) => d.lancamento));
+    const totalDeItens = resumo.porItem.reduce((s, i) => s + i.quantidade, 0);
 
     let pagina = pdf.addPage(A4);
     let y = A4[1] - MARGEM;
 
-    function linhaHorizontal(cor = LINHA, espessura = 0.75) {
-        pagina.drawLine({ start: { x: MARGEM, y }, end: { x: MARGEM + LARGURA_UTIL, y }, thickness: espessura, color: cor });
+    function linhaHorizontal(cor = LINHA, espessura = 0.75, direita = MARGEM + LARGURA_UTIL) {
+        pagina.drawLine({ start: { x: MARGEM, y }, end: { x: direita, y }, thickness: espessura, color: cor });
     }
 
     function cabecalhoTabela() {
         y -= ALTURA_LINHA;
         escrever(pagina, 'Data', MARGEM, y, negrito, TAMANHO_TABELA, CINZA);
-        REFEICOES.forEach((r, i) => escreverDireita(pagina, NOMES_REFEICOES[r], direitaRefeicao(i), y, negrito, TAMANHO_TABELA, CINZA));
+        escrever(pagina, 'Itens', X_ITENS, y, negrito, TAMANHO_TABELA, CINZA);
         escreverDireita(pagina, 'Total do dia', DIREITA_TOTAL, y, negrito, TAMANHO_TABELA, CINZA);
         y -= 6;
         linhaHorizontal();
     }
 
-    // quebra de página no meio da tabela: a página nova repete quem é e o cabeçalho
-    function garantirEspaco(altura: number, repetirCabecalho: boolean) {
+    // quebra de página no meio de uma tabela: a página nova repete quem é e, se houver, o cabeçalho
+    function garantirEspaco(altura: number, cabecalho?: () => void) {
         if (y - altura >= MARGEM) return;
         pagina = pdf.addPage(A4);
         y = A4[1] - MARGEM - 10;
         escrever(pagina, caber(normal, `${empresa.nome} — ${titulo} (continuação)`, 10, LARGURA_UTIL), MARGEM, y, normal, 10, CINZA);
         y -= 10;
-        if (repetirCabecalho) cabecalhoTabela();
+        cabecalho?.();
     }
 
     // título
@@ -201,48 +225,72 @@ export async function gerarPdfMes(
     escrever(pagina, titulo, MARGEM, y, normal, 12, CINZA);
     y -= 16;
 
-    // uma linha por dia
+    // uma linha por dia; a coluna Itens cresce para baixo quando não cabe numa linha
     cabecalhoTabela();
     if (ordenados.length === 0) {
         y -= ALTURA_LINHA;
         escrever(pagina, 'Nenhum dia lançado neste mês.', MARGEM, y, normal, TAMANHO_TABELA, CINZA);
     }
     for (const { lancamento: l } of ordenados) {
-        garantirEspaco(ALTURA_LINHA, true);
+        const linhas = quebrarLinhas(normal, textosDoDia(l.itens), TAMANHO_TABELA, LARGURA_TEXTO_ITENS);
+        const altura = ALTURA_LINHA + (linhas.length - 1) * ENTRELINHA;
+        // o dia inteiro na mesma página; só se nem uma página inteira bastar ele continua na seguinte
+        garantirEspaco(altura <= ESPACO_PAGINA ? altura : ALTURA_LINHA, cabecalhoTabela);
         y -= ALTURA_LINHA;
         escrever(pagina, `${formatarData(l.data)} ${diaDaSemana(l.data)}`, MARGEM, y, normal, TAMANHO_TABELA);
-        REFEICOES.forEach((r, i) => escreverDireita(pagina, inteiro.format(l.quantidades[r]), direitaRefeicao(i), y, normal, TAMANHO_TABELA));
         escreverDireita(pagina, formatarCentavos(l.totalCentavos), DIREITA_TOTAL, y, normal, TAMANHO_TABELA);
+        linhas.forEach((t, i) => {
+            if (i > 0) {
+                garantirEspaco(ENTRELINHA, cabecalhoTabela);
+                y -= ENTRELINHA;
+            }
+            escrever(pagina, t, X_ITENS, y, normal, TAMANHO_TABELA);
+        });
     }
-    garantirEspaco(ALTURA_LINHA + 8, true);
+    garantirEspaco(ALTURA_LINHA + 8, cabecalhoTabela);
     y -= 6;
     linhaHorizontal(TINTA);
     y -= ALTURA_LINHA - 4;
     escrever(pagina, 'Total', MARGEM, y, negrito, TAMANHO_TABELA);
-    REFEICOES.forEach((r, i) => escreverDireita(pagina, inteiro.format(resumo.quantidades[r]), direitaRefeicao(i), y, negrito, TAMANHO_TABELA));
+    escrever(pagina, `${inteiro.format(totalDeItens)} ${totalDeItens === 1 ? 'item' : 'itens'}`, X_ITENS, y, negrito, TAMANHO_TABELA);
     escreverDireita(pagina, formatarCentavos(resumo.totalCentavos), DIREITA_TOTAL, y, negrito, TAMANHO_TABELA);
 
-    // quantidade e valor por tipo de refeição (bloco inteiro na mesma página)
+    // quantidade e valor por item (continua na página seguinte se não couber, repetindo o cabeçalho)
     const direitaQtd = MARGEM + 300;
     const direitaValor = MARGEM + 420;
-    garantirEspaco(36 + ALTURA_LINHA * (REFEICOES.length + 2), false);
-    y -= 36;
-    escrever(pagina, 'Por tipo de refeição', MARGEM, y, negrito, 12);
-    y -= ALTURA_LINHA;
-    escreverDireita(pagina, 'Quantidade', direitaQtd, y, negrito, TAMANHO_TABELA, CINZA);
-    escreverDireita(pagina, 'Valor', direitaValor, y, negrito, TAMANHO_TABELA, CINZA);
-    y -= 6;
-    pagina.drawLine({ start: { x: MARGEM, y }, end: { x: direitaValor, y }, thickness: 0.75, color: LINHA });
-    for (const r of REFEICOES) {
+    const larguraNome = direitaQtd - 70 - MARGEM;
+    function cabecalhoPorItem() {
         y -= ALTURA_LINHA;
-        escrever(pagina, NOMES_REFEICOES[r], MARGEM, y, normal, TAMANHO_TABELA);
-        escreverDireita(pagina, inteiro.format(resumo.quantidades[r]), direitaQtd, y, normal, TAMANHO_TABELA);
-        escreverDireita(pagina, formatarCentavos(resumo.valores[r]), direitaValor, y, normal, TAMANHO_TABELA);
+        escrever(pagina, 'Item', MARGEM, y, negrito, TAMANHO_TABELA, CINZA);
+        escreverDireita(pagina, 'Quantidade', direitaQtd, y, negrito, TAMANHO_TABELA, CINZA);
+        escreverDireita(pagina, 'Valor', direitaValor, y, negrito, TAMANHO_TABELA, CINZA);
+        y -= 6;
+        linhaHorizontal(LINHA, 0.75, direitaValor);
+    }
+    // título, cabeçalho e o primeiro item na mesma página
+    garantirEspaco(36 + ALTURA_LINHA * 2 + 6);
+    y -= 36;
+    escrever(pagina, 'Por item', MARGEM, y, negrito, 12);
+    cabecalhoPorItem();
+    if (resumo.porItem.length === 0) {
+        y -= ALTURA_LINHA;
+        escrever(pagina, 'Nenhum item lançado neste mês.', MARGEM, y, normal, TAMANHO_TABELA, CINZA);
+    }
+    for (const i of resumo.porItem) {
+        const linhas = quebrarLinhas(normal, [i.nome], TAMANHO_TABELA, larguraNome);
+        garantirEspaco(ALTURA_LINHA + (linhas.length - 1) * ENTRELINHA, cabecalhoPorItem);
+        y -= ALTURA_LINHA;
+        escreverDireita(pagina, inteiro.format(i.quantidade), direitaQtd, y, normal, TAMANHO_TABELA);
+        escreverDireita(pagina, formatarCentavos(i.valorCentavos), direitaValor, y, normal, TAMANHO_TABELA);
+        linhas.forEach((t, n) => {
+            if (n > 0) y -= ENTRELINHA;
+            escrever(pagina, t, MARGEM, y, normal, TAMANHO_TABELA);
+        });
     }
 
     // destaque: valor total do mês
     const alturaDestaque = 64;
-    garantirEspaco(28 + alturaDestaque, false);
+    garantirEspaco(28 + alturaDestaque);
     y -= 28 + alturaDestaque;
     pagina.drawRectangle({ x: MARGEM, y, width: LARGURA_UTIL, height: alturaDestaque, color: DESTAQUE_FUNDO });
     escrever(pagina, 'VALOR TOTAL DO MÊS', MARGEM + 16, y + alturaDestaque / 2 - 5, negrito, 13, DESTAQUE_TINTA);
