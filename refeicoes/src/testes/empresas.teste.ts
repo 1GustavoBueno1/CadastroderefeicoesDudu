@@ -5,7 +5,6 @@ import {
   criarEmpresa,
   atualizarEmpresa,
 } from '../services/empresas';
-import type { PorRefeicao } from '../types';
 
 function confere(descricao: string, ok: boolean, detalhe?: unknown) {
   console.log(ok ? '✅' : '❌', descricao, detalhe ?? '');
@@ -14,18 +13,16 @@ function confere(descricao: string, ok: boolean, detalhe?: unknown) {
 export async function rodarTesteEmpresas() {
   await entrar('teste@teste.com', '123456'); // ajuste para o seu usuário do emulador
 
-  const precos: PorRefeicao = { cafeManha: 850, almoco: 2200, cafeTarde: 850, janta: 2000 };
-
   // criar (com espaços de propósito, para testar o trim)
-  const idZeta = await criarEmpresa({ nome: '  Zeta  ', precosPadrao: precos, ativa: true });
-  const idAlfa = await criarEmpresa({ nome: '  Alfa  ', precosPadrao: precos, ativa: true });
+  const idZeta = await criarEmpresa({ nome: '  Zeta  ', ativa: true });
+  const idAlfa = await criarEmpresa({ nome: '  Alfa  ', ativa: true });
   confere('criarEmpresa devolve IDs', !!idZeta && !!idAlfa, { idZeta, idAlfa });
 
   // buscar e conferir o trim
   const alfa = await buscarEmpresa(idAlfa);
   confere('nome salvo sem espaços', alfa?.nome === 'Alfa', `"${alfa?.nome}"`);
   confere('buscarEmpresa traz o id', alfa?.id === idAlfa);
-  confere('preço salvo em centavos', alfa?.precosPadrao.almoco === 2200);
+  confere('empresa não tem mais preços', alfa !== null && !('precosPadrao' in alfa), alfa);
 
   // listar e conferir a ordem
   const lista = await listarEmpresas();
@@ -38,7 +35,7 @@ export async function rodarTesteEmpresas() {
   await atualizarEmpresa(idAlfa, { ativa: false });
   const alfaDepois = await buscarEmpresa(idAlfa);
   confere('atualizar mudou o ativa', alfaDepois?.ativa === false);
-  confere('atualizar não mexeu no resto', alfaDepois?.nome === 'Alfa' && alfaDepois?.precosPadrao.almoco === 2200);
+  confere('atualizar não mexeu no nome', alfaDepois?.nome === 'Alfa');
 
   // ID que não existe → null, não erro
   const inexistente = await buscarEmpresa('id-que-nao-existe');
@@ -53,4 +50,3 @@ export async function rodarTesteEmpresas() {
     confere('sem login é bloqueado pela regra', true, (e as Error).message);
   }
 }
-

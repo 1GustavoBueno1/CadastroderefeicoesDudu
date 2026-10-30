@@ -2,7 +2,7 @@ import { entrar, sair } from '../services/auth';
 import { criarEmpresa } from '../services/empresas';
 import { buscarLancamento, excluirLancamento, salvarLancamento } from '../services/lancamentos';
 import { adicionarFotos, listarFotos, removerFoto } from '../services/fotos';
-import type { PorRefeicao } from '../types';
+import type { ItensDoDia } from '../types';
 
 function confere(descricao: string, ok: boolean, detalhe?: unknown) {
   console.log(ok ? '✅' : '❌', descricao, detalhe ?? '');
@@ -40,11 +40,13 @@ export async function rodarTesteFotos() {
   await entrar('teste@teste.com', '123456'); // ajuste para o seu usuário do emulador
   console.log('--- fotos (service) ---');
 
-  const precos: PorRefeicao = { cafeManha: 850, almoco: 2200, cafeTarde: 900, janta: 2000 };
-  const quantidades: PorRefeicao = { cafeManha: 10, almoco: 25, cafeTarde: 8, janta: 12 };
-  const empresaId = await criarEmpresa({ nome: 'Teste Fotos', precosPadrao: precos, ativa: true });
+  const itens: ItensDoDia = {
+    marmita: { nome: 'Marmita', quantidade: 25, precoCentavos: 2200 },
+    coca: { nome: 'Coca lata', quantidade: 10, precoCentavos: 600 },
+  };
+  const empresaId = await criarEmpresa({ nome: 'Teste Fotos', ativa: true });
   const data = '2026-10-05';
-  await salvarLancamento(empresaId, data, quantidades, precos);
+  await salvarLancamento(empresaId, data, itens);
 
   // adicionar 2 fotos
   await adicionarFotos(empresaId, data, [await imagemDeTeste('#b8336a', '1'), await imagemDeTeste('#247b50', '2')]);
@@ -56,7 +58,7 @@ export async function rodarTesteFotos() {
   confere('fotos gravadas como JPEG', fotos.every((f) => f.dataUrl.startsWith('data:image/jpeg;base64,')));
 
   // salvar o lançamento de novo não pode apagar o contador
-  await salvarLancamento(empresaId, data, { ...quantidades, almoco: 30 }, precos);
+  await salvarLancamento(empresaId, data, { ...itens, marmita: { ...itens.marmita, quantidade: 30 } });
   lanc = await buscarLancamento(empresaId, data);
   confere('salvar o dia de novo mantém qtdFotos === 2', lanc?.qtdFotos === 2, lanc?.qtdFotos);
 

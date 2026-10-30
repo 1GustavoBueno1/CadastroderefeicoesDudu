@@ -22,9 +22,11 @@ async function deveFalhar(descricao: string, operacao: () => Promise<unknown>) {
   }
 }
 
-const precos = { cafeManha: 850, almoco: 2200, cafeTarde: 900, janta: 2000 };
-const quantidades = { cafeManha: 10, almoco: 25, cafeTarde: 8, janta: 12 };
-const lancBom = { quantidades, precos, totalCentavos: 94700 };
+const itens = {
+  marmita: { nome: 'Marmita', quantidade: 2, precoCentavos: 2200 },
+  coca: { nome: 'Coca lata', quantidade: 1, precoCentavos: 600 },
+};
+const lancBom = { itens, totalCentavos: 5000 };
 const fotoBoa = { dataUrl: 'data:image/jpeg;base64,' + 'A'.repeat(100), ordem: 1 };
 
 export async function rodarTesteRegrasFechamento() {
@@ -32,7 +34,7 @@ export async function rodarTesteRegrasFechamento() {
   console.log('--- regras de fechamento ---');
 
   const empresa = await addDoc(collection(db, 'empresas'), {
-    nome: 'Teste Regras Fechamento', precosPadrao: precos, ativa: true,
+    nome: 'Teste Regras Fechamento', ativa: true,
   });
   const dia = (data: string) => doc(db, 'empresas', empresa.id, 'lancamentos', data);
   const foto = (data: string, id: string) => doc(dia(data), 'fotos', id);
